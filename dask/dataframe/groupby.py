@@ -1093,7 +1093,7 @@ class _GroupBy(object):
         token = self._token_prefix + token
         levels = _determine_levels(self.index)
 
-        return aca(
+        return self._aca(
             [self.obj, self.index]
             if not isinstance(self.index, list)
             else [self.obj] + self.index,
@@ -1719,6 +1719,10 @@ class _GroupBy(object):
 
         return df3
 
+    @derived_from(pd.Series)
+    def nlargest(self, n, split_every=False, split_out=1):
+        raise NotImplemented
+
 
 class DataFrameGroupBy(_GroupBy):
 
@@ -1855,6 +1859,61 @@ class SeriesGroupBy(_GroupBy):
             split_every=split_every,
             split_out=split_out,
         )
+
+    @derived_from(pd.Series)
+    def nlargest(self, n, split_every=False, split_out=1):
+        name = self._meta.obj.name
+        levels = _determine_levels(self.index)
+
+        return aca(
+            [self.obj, self.index]
+            if not isinstance(self.index, list)
+            else [self.obj] + self.index,
+            chunk=_nlargest_df_chunk,
+            aggregate=_nlargest_df_aggregate,
+            token="series-groupby-nlargest",
+            chunk_kwargs={"levels": levels, "name": name},
+            aggregate_kwargs={"levels": levels, "name": name},
+            split_every=split_every,
+            split_out=split_out,
+            split_out_setup=split_out_on_index,
+            sort=self.sort,
+        )
+
+
+###############################################################
+# nlargest
+###############################################################
+
+
+def _nlargest_df_chunk(df, *index, **kwargs):
+    levels = kwargs.pop("levels")
+    name = kwargs.pop("name")
+    # n = kwargs.pop("n")
+
+    df = df.set_index(*index)
+    g = _groupby_raise_unaligned(df, by=index)
+    if len(df) > 0:
+        grouped = g[name].nlargest(n=1).to_frame()
+        # we set the index here to force a possibly duplicate index
+        # for our reduce step
+        if isinstance(levels, list):
+            grouped.index = pd.MultiIndex.from_arrays(
+                [grouped.index.get_level_values(level=level) for level in levels]
+            )
+        else:
+            grouped.index = grouped.index.get_level_values(level=levels)
+    else:
+        # Manually create empty version, since groupby-apply for empty frame
+        # results in df with no columns
+        grouped = g[name].nlargest(n=1).to_frame()
+        grouped = grouped.astype(df.dtypes[grouped.columns].to_dict())
+
+    return grouped
+
+
+def _nlargest_df_aggregate(df, levels, name):
+    return df.groupby(level=levels)[name].nlargest(1)
 
 
 def _unique_aggregate(series_gb, name=None):

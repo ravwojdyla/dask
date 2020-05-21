@@ -453,6 +453,22 @@ def test_series_groupby():
         assert_eq(dg.prod(), pdg.prod())
 
 
+def test_series_groupby():
+    s = pd.Series([1, 2, 2, 1, 1])
+    pd_group = s.groupby(s)
+
+    ss = dd.from_pandas(s, npartitions=2)
+    dask_group = ss.groupby(ss)
+
+    pd_group2 = s.groupby(s + 1)
+    dask_group2 = ss.groupby(ss + 1)
+
+    dask_group.nlargest(n=2)
+
+    # for dg, pdg in [(dask_group, pd_group), (pd_group2, dask_group2)]:
+    #    assert_eq(dg.nlargest(), pdg.nlargest())
+
+
 def test_series_groupby_errors():
     s = pd.Series([1, 2, 2, 1, 1])
 
@@ -1581,6 +1597,35 @@ def test_groupby_agg_grouper_single():
     result = a.groupby("a")["a"].agg(["min", "max"])
     expected = d.groupby("a")["a"].agg(["min", "max"])
     assert_eq(result, expected)
+
+
+def test_groupby_nlargest():
+    s = 1e1
+    d = pd.DataFrame(
+        {"a": np.random.choice(2, int(s)), "b": np.random.randint(0, 100, int(s))}
+    )
+    d = pd.DataFrame({"a": [1, 2, 1, 2], "b": [2, 4, 2, 8]})
+    a = dd.from_pandas(d, npartitions=2)
+
+    expected = d.groupby("a")["b"].nlargest(n=3)
+    actual = a.groupby("a")["b"].nlargest(n=1).compute()
+
+    print("\n")
+    print(expected)
+    print("\n")
+    print(actual)
+
+    # assert_eq(result, expected)
+
+    import timeit
+
+    t_0 = timeit.default_timer()
+    expected = a.groupby("a")["b"].nlargest(n=1).compute()
+    print(f"done in {timeit.default_timer() - t_0} sec")
+
+    t_0 = timeit.default_timer()
+    a.groupby("a")["b"].apply(lambda x: x.nlargest(1), meta=("b", "f8")).compute()
+    print(f"apple done in {timeit.default_timer() - t_0} sec")
 
 
 @pytest.mark.parametrize("slice_", ["a", ["a"], ["a", "b"], ["b"]])
