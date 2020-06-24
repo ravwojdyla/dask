@@ -1608,7 +1608,7 @@ def test_groupby_nlargest():
     a = dd.from_pandas(d, npartitions=2)
 
     expected = d.groupby("a")["b"].nlargest(n=3)
-    actual = a.groupby("a")["b"].nlargest(n=1).compute()
+    actual = a.groupby("a")["b"].nlargest(n=3).compute()
 
     print("\n")
     print(expected)
