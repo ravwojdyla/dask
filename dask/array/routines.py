@@ -368,7 +368,7 @@ def matmul(a, b):
     return out
 
 
-def matmul_old(a, b):
+def matmul_org(a, b):
     a = asanyarray(a)
     b = asanyarray(b)
 
